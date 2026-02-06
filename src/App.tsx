@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { User } from './types/index';
+import type { User, FoodLog } from './types/index';
 import { getCurrentUser, clearCurrentUser } from './utils/storage';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
@@ -122,7 +122,7 @@ function App() {
       {menuOpen && <div className="mobile-overlay" onClick={() => setMenuOpen(false)}></div>}
 
       {/* AI Assistant */}
-      <AIChat user={currentUser} onDataUpdate={() => {
+      <AIChat user={currentUser} onDataUpdate={(_log: FoodLog) => {
         const updated = getCurrentUser();
         if (updated) setCurrentUser(updated);
         // Force a global data refresh event

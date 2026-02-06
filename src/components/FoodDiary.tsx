@@ -124,27 +124,7 @@ export const FoodDiary: React.FC<FoodDiaryProps> = ({ user }) => {
     setIsAddModalOpen(false);
   };
 
-  const handleQuickAdd = (recipe: any, mealType: string) => {
-    const log: FoodLog = {
-      id: generateId(),
-      userId: user.id,
-      foodId: 'recipe-' + generateId(),
-      foodName: recipe.name,
-      mealType: mealType as any,
-      servings: 1,
-      calories: recipe.calories,
-      protein: recipe.protein,
-      carbs: recipe.carbs,
-      fat: recipe.fat,
-      fiber: recipe.fiber,
-      date: selectedDate,
-      time: getCurrentTime(),
-    };
-    saveFoodLog(log);
-    loadFoodLogs();
-    window.dispatchEvent(new CustomEvent('dataUpdated'));
-    setIsAddModalOpen(false); // Close if open
-  };
+
 
   const handleDeleteLog = (logId: string) => {
     setDeleteId(logId);
