@@ -1,3 +1,4 @@
+console.log("App initialization started...");
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
