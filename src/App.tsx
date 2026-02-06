@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { User, FoodLog } from './types/index';
-import { getCurrentUser, clearCurrentUser } from './utils/storage';
+import { getCurrentUser, clearCurrentUser, getUserFromCloud, saveCurrentUser, clearAllData } from './utils/storage';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
 import { FoodDiary } from './components/FoodDiary';
@@ -8,6 +8,7 @@ import { Activity } from './components/Activity';
 import { Profile } from './components/Profile';
 import { AIChat } from './components/AIChat';
 import { NutritionDetail } from './components/NutritionDetail';
+import { supabase } from './config/supabase';
 import './index.css';
 
 type Page = 'dashboard' | 'diary' | 'activity' | 'profile' | 'nutrition';
@@ -18,10 +19,33 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
+    // 1. Initial Local Check
     const user = getCurrentUser();
     if (user) {
       setCurrentUser(user);
     }
+
+    // 2. Supabase Auth Listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: string, session: any) => {
+      console.log('Auth event:', event);
+      if (session?.user) {
+        // If we have a session but no currentUser or email doesn't match
+        if (!currentUser || currentUser.id !== session.user.id) {
+          const cloudUser = await getUserFromCloud(session.user.id);
+          if (cloudUser) {
+            saveCurrentUser(cloudUser);
+            setCurrentUser(cloudUser);
+          }
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        clearCurrentUser();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogin = (user: User) => {
@@ -29,7 +53,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    clearCurrentUser();
+    clearAllData();
     setCurrentUser(null);
     setCurrentPage('dashboard');
   };
