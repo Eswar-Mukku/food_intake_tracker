@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User } from '../types/index';
-import { getUserByEmail, saveCurrentUser, saveUserToCloud, getUserFromCloud, syncAllDataFromCloud } from '../utils/storage';
+import { saveCurrentUser, syncAllDataFromCloud } from '../utils/storage';
 import { calculateCalorieGoal, calculateMacroGoals } from '../utils/helpers';
 import { supabase } from '../config/supabase';
 
@@ -36,68 +36,78 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
 
     try {
+      console.log('🔐 Attempting login...');
+
       // 1. Authenticate with Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase(),
+        email: email.toLowerCase().trim(),
         password,
       });
 
       if (authError) {
-        // If Auth fails, check local fallback
-        const localUser = getUserByEmail(email);
-        if (localUser) {
-          saveCurrentUser(localUser);
-          onLogin(localUser);
-          return;
-        }
-        throw authError;
+        console.error('❌ Auth error:', authError);
+        throw new Error(authError.message);
       }
 
-      if (authData.user) {
-        // 2. Get Profile from Cloud
-        let cloudUser = await getUserFromCloud(authData.user.id);
-
-        // 3. If no profile exists in cloud, check local or create default
-        if (!cloudUser) {
-          console.warn('Profile missing in cloud, searching local fallback...');
-          const localUser = getUserByEmail(email);
-
-          if (localUser) {
-            // Update local user with new cloud ID if needed and save to cloud
-            cloudUser = { ...localUser, id: authData.user.id };
-            await saveUserToCloud(cloudUser);
-          } else {
-            // Create a minimal default profile if absolutely nothing found
-            cloudUser = {
-              id: authData.user.id,
-              email: email.toLowerCase(),
-              name: email.split('@')[0],
-              age: 25,
-              gender: 'male',
-              height: 170,
-              currentWeight: 70,
-              goalWeight: 65,
-              activityLevel: 'moderate',
-              goal: 'maintain',
-              dailyCalorieGoal: 2000,
-              dailyProteinGoal: 150,
-              dailyCarbsGoal: 200,
-              dailyFatGoal: 65,
-              dailyWaterGoal: 2000,
-              createdAt: new Date().toISOString(),
-            };
-            await saveUserToCloud(cloudUser);
-          }
-        }
-
-        // 4. Success
-        await syncAllDataFromCloud(cloudUser.id);
-        saveCurrentUser(cloudUser);
-        onLogin(cloudUser);
+      if (!authData.user) {
+        throw new Error('No user data returned');
       }
+
+      console.log('✅ Auth successful, fetching profile...');
+
+      // 2. Get Profile from Supabase
+      const { data: profileData, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('❌ Profile fetch error:', profileError);
+      }
+
+      let userProfile = profileData as User | null;
+
+      // 3. If no profile, create default
+      if (!userProfile) {
+        console.warn('⚠️ No profile found, creating one...');
+        userProfile = {
+          id: authData.user.id,
+          email: email.toLowerCase().trim(),
+          name: email.split('@')[0],
+          age: 25,
+          gender: 'male',
+          height: 170,
+          currentWeight: 70,
+          goalWeight: 65,
+          activityLevel: 'moderate',
+          goal: 'maintain',
+          dailyCalorieGoal: 2000,
+          dailyProteinGoal: 150,
+          dailyCarbsGoal: 200,
+          dailyFatGoal: 65,
+          dailyWaterGoal: 2000,
+          createdAt: new Date().toISOString(),
+        };
+
+        const { error: insertError } = await supabase.from('users').insert(userProfile);
+        if (insertError) {
+          console.error('❌ Profile creation failed:', insertError);
+          throw new Error('Failed to create profile');
+        }
+        console.log('✅ Profile created');
+      }
+
+      // 4. Sync and login
+      console.log('🔄 Syncing data...');
+      await syncAllDataFromCloud(userProfile.id);
+      saveCurrentUser(userProfile);
+      console.log('✅ Login complete!');
+      onLogin(userProfile);
+
     } catch (err: any) {
-      console.error('Login Error:', err);
-      setError(`Login failed: ${err.message || 'Unknown error'}`);
+      console.error('❌ Login failed:', err);
+      setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -114,39 +124,49 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       return;
     }
 
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log('📝 Starting registration...');
+
       // 1. Prepare User Data
       const ageNum = parseInt(age);
       const heightNum = parseInt(height);
       const currentWeightNum = parseFloat(currentWeight);
       const goalWeightNum = parseFloat(goalWeight);
 
-      // 2. Try Supabase Auth SignUp
+      // 2. Create Supabase Auth Account
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.toLowerCase(),
+        email: email.toLowerCase().trim(),
         password,
       });
 
       if (authError) {
-        // Special case: already exists
-        if (authError.message.toLowerCase().includes('already registered')) {
+        console.error('❌ Auth error:', authError);
+        if (authError.message.toLowerCase().includes('already') ||
+          authError.message.toLowerCase().includes('exists')) {
           setError('Email already registered. Please login instead.');
-          setLoading(false);
-          setIsLogin(true);
+          setTimeout(() => setIsLogin(true), 2000);
           return;
         }
         throw authError;
       }
 
       if (!authData.user) {
-        throw new Error('Authentication failed - no user returned');
+        throw new Error('Registration failed - no user created');
       }
 
-      // 3. Create Profile Object
+      console.log('✅ Auth account created');
+
+      // 3. Create User Profile
       const newUser: User = {
         id: authData.user.id,
-        email: email.toLowerCase(),
-        name,
+        email: email.toLowerCase().trim(),
+        name: name.trim(),
         age: ageNum,
         gender,
         height: heightNum,
@@ -162,28 +182,33 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         createdAt: new Date().toISOString(),
       };
 
-      // Calculate Nutritional Goals
+      // 4. Calculate Goals
       newUser.dailyCalorieGoal = Math.round(calculateCalorieGoal(newUser));
       const macros = calculateMacroGoals(newUser.dailyCalorieGoal);
       newUser.dailyProteinGoal = Math.round(macros.protein);
       newUser.dailyCarbsGoal = Math.round(macros.carbs);
       newUser.dailyFatGoal = Math.round(macros.fat);
 
-      // 4. Save to Cloud (Profile Table)
-      const { error: profileError } = await supabase.from('users').upsert(newUser);
+      console.log('💾 Saving profile to database...');
+
+      // 5. Save Profile to Supabase
+      const { error: profileError } = await supabase.from('users').insert(newUser);
+
       if (profileError) {
-        console.error('Profile creation error:', profileError);
-        // We still have the auth account, so we proceed but warn
-        console.warn('Auth account created but profile save failed.');
+        console.error('❌ Profile save error:', profileError);
+        throw new Error(`Failed to save profile: ${profileError.message}`);
       }
 
-      // 5. Success
+      console.log('✅ Profile saved successfully');
+
+      // 6. Login
       saveCurrentUser(newUser);
+      console.log('✅ Registration complete!');
       onLogin(newUser);
 
     } catch (err: any) {
-      console.error('Registration Error:', err);
-      setError(`Registration failed: ${err.message || 'Unknown error'}`);
+      console.error('❌ Registration failed:', err);
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

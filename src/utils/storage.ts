@@ -58,36 +58,12 @@ export const getCurrentUser = (): User | null => {
 
 export const saveCurrentUser = async (user: User): Promise<void> => {
     saveToStorage(STORAGE_KEYS.CURRENT_USER, user);
-
-    // Also update in users list
-    const users = getAllUsers();
-    const index = users.findIndex(u => u.id === user.id);
-    if (index !== -1) {
-        users[index] = user;
-    } else {
-        users.push(user);
-    }
-    saveAllUsers(users);
-
     // Sync to cloud in background
     saveUserToCloud(user);
 };
 
 export const clearCurrentUser = (): void => {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
-};
-
-export const getAllUsers = (): User[] => {
-    return getFromStorage<User[]>(STORAGE_KEYS.USERS) || [];
-};
-
-export const saveAllUsers = (users: User[]): void => {
-    saveToStorage(STORAGE_KEYS.USERS, users);
-};
-
-export const getUserByEmail = (email: string): User | null => {
-    const users = getAllUsers();
-    return users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;
 };
 
 // Cloud User management
@@ -260,36 +236,6 @@ export const getTotalCaloriesBurnedForDate = (userId: string, date: string): num
     const logs = getExerciseLogs(userId, date);
     return logs.reduce((total, log) => total + log.caloriesBurned, 0);
 };
-
-// Seed database with demo user if empty
-export const seedDatabase = (): void => {
-    const users = getAllUsers();
-    if (users.length === 0) {
-        const demoUser: User = {
-            id: 'demo-user-1',
-            email: 'demo@example.com',
-            name: 'Demo User',
-            age: 25,
-            gender: 'male',
-            height: 175,
-            currentWeight: 75,
-            goalWeight: 70,
-            activityLevel: 'moderate',
-            goal: 'lose',
-            dailyCalorieGoal: 2000,
-            dailyProteinGoal: 150,
-            dailyCarbsGoal: 200,
-            dailyFatGoal: 65,
-            dailyWaterGoal: 2000,
-            createdAt: new Date().toISOString(),
-        };
-        saveAllUsers([demoUser]);
-        console.log('Database seeded with demo user: demo@example.com / password (any)');
-    }
-};
-
-// Initial seed
-seedDatabase();
 
 // Clear all data (for testing or logout)
 export const clearAllData = (): void => {
