@@ -100,7 +100,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
       // 4. Sync and login
       console.log('🔄 Syncing data...');
-      await syncAllDataFromCloud(userProfile.id);
+      try {
+        await syncAllDataFromCloud(userProfile.id);
+      } catch (syncError) {
+        console.warn('⚠️ Sync failed, continuing anyway:', syncError);
+      }
       saveCurrentUser(userProfile);
       console.log('✅ Login complete!');
       onLogin(userProfile);
@@ -134,10 +138,12 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       console.log('📝 Starting registration...');
 
       // 1. Prepare User Data
-      const ageNum = parseInt(age);
-      const heightNum = parseInt(height);
+      const ageNum = parseInt(age, 10);
+      const heightNum = parseInt(height, 10);
       const currentWeightNum = parseFloat(currentWeight);
       const goalWeightNum = parseFloat(goalWeight);
+
+      console.log('📊 Parsed values:', { ageNum, heightNum, currentWeightNum, goalWeightNum });
 
       // 2. Create Supabase Auth Account
       const { data: authData, error: authError } = await supabase.auth.signUp({
