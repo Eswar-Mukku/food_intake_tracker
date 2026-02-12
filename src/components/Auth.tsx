@@ -98,12 +98,15 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         console.log('✅ Profile created');
       }
 
-      // 4. Sync and login
+      // 4. Sync and login (with timeout)
       console.log('🔄 Syncing data...');
       try {
-        await syncAllDataFromCloud(userProfile.id);
-      } catch (syncError) {
-        console.warn('⚠️ Sync failed, continuing anyway:', syncError);
+        await Promise.race([
+          syncAllDataFromCloud(userProfile.id),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 5000))
+        ]);
+      } catch (syncError: any) {
+        console.warn('⚠️ Sync failed, continuing anyway:', syncError.message);
       }
       saveCurrentUser(userProfile);
       console.log('✅ Login complete!');
@@ -230,6 +233,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <h1 className="logo-text">Food Tracker</h1>
           </div>
           <p className="auth-subtitle">Your personal calorie & nutrition tracker</p>
+          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.1</p>
         </div>
 
         <div className="auth-tabs">
