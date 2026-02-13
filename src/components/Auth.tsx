@@ -21,17 +21,29 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [activityLevel, setActivityLevel] = useState<User['activityLevel']>('moderate');
   const [goal, setGoal] = useState<User['goal']>('maintain');
   const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setStatusMessage('Authenticating...');
     setLoading(true);
+
+    // Safety timeout to prevent infinite hanging
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError('Request timed out. Please check your connection or try again.');
+        setStatusMessage('');
+      }
+    }, 15000); // 15 seconds max
 
     if (!email || !password) {
       setError('Please fill in all fields');
       setLoading(false);
+      clearTimeout(safetyTimeout);
       return;
     }
 
@@ -53,14 +65,20 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         throw new Error('No user data returned');
       }
 
+      setStatusMessage('Fetching profile...');
       console.log('✅ Auth successful, fetching profile...');
 
-      // 2. Get Profile from Supabase
-      const { data: profileData, error: profileError } = await supabase
+      // 2. Get Profile from Supabase (with timeout)
+      const profilePromise = supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
         .single();
+
+      const { data: profileData, error: profileError } = await Promise.race([
+        profilePromise,
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Profile fetch timeout')), 8000))
+      ]);
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('❌ Profile fetch error:', profileError);
@@ -70,7 +88,9 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
       // 3. If no profile, create default
       if (!userProfile) {
+        setStatusMessage('Creating profile...');
         console.warn('⚠️ No profile found, creating one...');
+
         userProfile = {
           id: authData.user.id,
           email: email.toLowerCase().trim(),
@@ -93,12 +113,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         const { error: insertError } = await supabase.from('users').insert(userProfile);
         if (insertError) {
           console.error('❌ Profile creation failed:', insertError);
-          throw new Error('Failed to create profile');
+          // Don't block login if profile creation fails (likely due to missing table)
+          console.warn('⚠️ Could not save profile to cloud (tables might be missing). Proceeding locally.');
         }
-        console.log('✅ Profile created');
+        console.log('✅ Profile created local object');
       }
 
       // 4. Sync and login (with timeout)
+      setStatusMessage('Syncing data...');
       console.log('🔄 Syncing data...');
       try {
         await Promise.race([
@@ -108,15 +130,24 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       } catch (syncError: any) {
         console.warn('⚠️ Sync failed, continuing anyway:', syncError.message);
       }
+
       saveCurrentUser(userProfile);
       console.log('✅ Login complete!');
+      clearTimeout(safetyTimeout);
       onLogin(userProfile);
 
     } catch (err: any) {
       console.error('❌ Login failed:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
+      // Special handling for "Relation does not exist" (missing tables)
+      if (err.message && err.message.includes('relation "users" does not exist')) {
+        setError('Database tables missing. Please run the SQL setup script.');
+      } else {
+        setError(err.message || 'Login failed. Please check your credentials.');
+      }
     } finally {
+      clearTimeout(safetyTimeout);
       setLoading(false);
+      setStatusMessage('');
     }
   };
 
@@ -233,7 +264,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <h1 className="logo-text">Food Tracker</h1>
           </div>
           <p className="auth-subtitle">Your personal calorie & nutrition tracker</p>
-          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.1</p>
+          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.2</p>
         </div>
 
         <div className="auth-tabs">
@@ -288,7 +319,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
 
             <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Processing...' : 'Login'}
+              {loading ? (statusMessage || 'Processing...') : 'Login'}
             </button>
 
 
@@ -426,7 +457,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
 
             <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: '1rem' }} disabled={loading}>
-              {loading ? 'Creating Account...' : 'Create Account'}
+              {loading ? (statusMessage || 'Creating Account...') : 'Create Account'}
             </button>
           </form>
         )}
