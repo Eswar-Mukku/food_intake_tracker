@@ -279,7 +279,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <h1 className="logo-text">Food Tracker</h1>
           </div>
           <p className="auth-subtitle">Your personal calorie & nutrition tracker</p>
-          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.3 - Timeout Fix</p>
+          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.4</p>
         </div>
 
         <div className="auth-tabs">
