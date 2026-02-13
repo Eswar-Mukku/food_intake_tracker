@@ -31,14 +31,14 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setStatusMessage('Authenticating...');
     setLoading(true);
 
-    // Safety timeout to prevent infinite hanging
+    // Safety timeout
     const safetyTimeout = setTimeout(() => {
       if (loading) {
         setLoading(false);
-        setError('Request timed out. Please check your connection or try again.');
+        setError('Connection timed out. Checking network...');
         setStatusMessage('');
       }
-    }, 15000); // 15 seconds max
+    }, 15000);
 
     if (!email || !password) {
       setError('Please fill in all fields');
@@ -48,13 +48,28 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
 
     try {
-      console.log('🔐 Attempting login...');
+      // 0. Check Connection first
+      setStatusMessage('Checking connection...');
+      const { error: healthError } = await supabase.from('users').select('count', { count: 'exact', head: true });
 
-      // 1. Authenticate with Supabase
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      if (healthError && !healthError.message.includes('JSON object requested, multiple')) {
+        console.warn('⚠️ Connection check warning:', healthError.message);
+        // Don't stop, just warn. The auth might still work or fail with a better error.
+      }
+
+      console.log('🔐 Attempting login...');
+      setStatusMessage('Authenticating...');
+
+      // 1. Authenticate with Supabase (with timeout)
+      const authPromise = supabase.auth.signInWithPassword({
         email: email.toLowerCase().trim(),
         password,
       });
+
+      const { data: authData, error: authError } = await Promise.race([
+        authPromise,
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Auth timeout')), 10000))
+      ]);
 
       if (authError) {
         console.error('❌ Auth error:', authError);
@@ -264,7 +279,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <h1 className="logo-text">Food Tracker</h1>
           </div>
           <p className="auth-subtitle">Your personal calorie & nutrition tracker</p>
-          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.2</p>
+          <p style={{ fontSize: '10px', opacity: 0.5, marginTop: '5px' }}>v2.3 - Timeout Fix</p>
         </div>
 
         <div className="auth-tabs">
