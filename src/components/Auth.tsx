@@ -476,6 +476,39 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </button>
           </form>
         )}
+
+        {/* Emergency Demo Button */}
+        <div style={{ marginTop: '2rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: '100%', background: '#f8fafc', color: '#64748b', border: '1px solid #cbd5e1' }}
+            onClick={() => {
+              const demoUser: User = {
+                id: 'demo-user-' + Date.now(),
+                email: 'demo@example.com',
+                name: 'Demo User',
+                age: 25,
+                gender: 'male',
+                height: 175,
+                currentWeight: 75,
+                goalWeight: 70,
+                activityLevel: 'moderate',
+                goal: 'maintain',
+                dailyCalorieGoal: 2000,
+                dailyProteinGoal: 150,
+                dailyCarbsGoal: 200,
+                dailyFatGoal: 65,
+                dailyWaterGoal: 2000,
+                createdAt: new Date().toISOString(),
+              };
+              saveCurrentUser(demoUser);
+              onLogin(demoUser);
+            }}
+          >
+            Skip Login (Enter Demo Mode) 🚀
+          </button>
+        </div>
       </div>
 
       <style>{`
